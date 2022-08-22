@@ -1,0 +1,76 @@
+#match with county boundary 
+out_surface_tif = gdal.Open('C:/Yoonjung/Data/rasteroutcome/33counties_surface_numofbuilding_sum.tif')    
+for x in range(1, out_surface_tif .RasterCount + 1):
+    band = out_surface_tif .GetRasterBand(x)
+    out_surface = band.ReadAsArray()
+    
+### county ids rasterized:
+#loaded = np.load(r'C:\Yoonjung\Data\MTBF\counties_rast250.npz')
+#counties_rast = loaded['counties_rast250'].flatten()
+#numberofbuildings = out_surface.flatten()
+
+#df =pd.DataFrame()
+#df['county'] = counties_rast
+#df['numofbuildings'] =  np.rot90(out_surface).flatten()
+#test = df.loc[df['numofbuildings']>0]
+#boulder = df.loc[df['county']==8013]
+
+#df.to_csv('C:/Yoonjung/Data/rasteroutcome/numberofbuildingZtraxOCM.csv')
+
+#df = pd.read_csv('C:/Yoonjung/Data/rasteroutcome/numberofbuildingZtraxOCM.csv')
+
+
+#compare it with MTBF
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+### the data stack
+#grided MTBF data
+ref_bldg_count_arr = np.load(r'C:\Yoonjung\Data\MTBF\hist2d_refbldg_counts_noPolygDuplNoSmallPolyg2_2022_incl_nyc.npz')
+ref_bldg_count_arr = ref_bldg_count_arr['arr_0']
+
+### county ids rasterized:
+loaded = np.load(r'C:\Yoonjung\Data\MTBF\counties_rast250.npz')
+counties_rast = loaded['counties_rast250'].flatten()
+
+
+DF = pd.DataFrame()
+DF['county'] = counties_rast
+years=range(1810,2016,5)
+for year in years:
+    ### now load your gridded surface for year x as a numpy array, than flatten it
+    ### get the area within relevant counties FIPS:
+    refbldgcounts_curryr = np.rot90(ref_bldg_count_arr[:,:,list(years).index(year)]).flatten()
+    ### I would create a pandas dataframe with three columns, your counts, the refbldgcounts_curryr, and counties_rast.
+    DF[year]=refbldgcounts_curryr 
+    ### each row represents a grid cell
+    ### then group by counties_rast column for county-level analysis
+
+#mtbfdf = DF.copy()
+#mtbfdf['totalnumMTBF'] = mtbfdf.iloc[:,1:].sum(axis=1, skipna=True)
+
+plt.scatter(x = DF[2015], y = df['numofbuildings'])
+plt.xlabel('mtbf')
+plt.ylabel('ztrax_ocm')
+
+
+#comparison test
+#from sklearn.metrics import precision_recall_fscore_support
+#np.corrcoef(mtbfdf[2015], df['numofbuildings'])
+DF['numofbuildings'] =  np.rot90(out_surface).flatten()
+select = DF[['county',2015,'numofbuildings']]
+completedf =select.loc[(select.county!=-1)&(select.numofbuildings>0)&(select[2015]>0)]
+completeDF = completedf[completedf["county"].isin([int(s) for s in counties])]   
+
+completeDF
+np.corrcoef(completeDF[2015], completeDF.numofbuildings)
+
+x = df.groupby(by=["county"], dropna=False).sum()
+y = DF.groupby(by=["county"], dropna=False).sum()
+
+#DF.to_csv("C:/Yoonjung/Data/rasteroutcome/MTBF_OCM_ZTRAX.csv")
+
+plt.scatter(y= completedf.numofbuildings ,x= completedf[2015] )
+plt.xlabel('mtbf')
+plt.ylabel('ztrax_ocm')
