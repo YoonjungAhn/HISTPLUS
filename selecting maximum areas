@@ -1,0 +1,13 @@
+masterdf = df
+print(len(masterdf))
+# drop dupl. - they oome from different wall material per building - disregarded here
+masterdf=masterdf.drop_duplicates(['RowID','BuildingOrImprovementNumber','BuildingAreaStndCode'])
+print(len(masterdf))
+masterdf['BuildingAreaSqFt']=masterdf['BuildingAreaSqFt'].fillna(0.0)
+maxdf=masterdf.groupby(['RowID','BuildingOrImprovementNumber'])['BuildingAreaSqFt'].max().reset_index()
+#join back:        
+masterdf=masterdf.merge(maxdf,on=['RowID','BuildingOrImprovementNumber','BuildingAreaSqFt'],how='right')
+print(len(masterdf))
+masterdf=masterdf.drop_duplicates(['RowID','BuildingOrImprovementNumber','BuildingAreaSqFt'])
+print(len(masterdf))
+plt.scatter(x=masterdf.PropertyAddressLongitude.values,y=masterdf.PropertyAddressLatitude.values,s=0.1)
