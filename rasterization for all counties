@@ -1,0 +1,328 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jul 26 15:45:53 2022
+
+@author: yoah2447
+"""
+import pandas as pd
+import matplotlib.pyplot as plt
+import math
+import geopandas
+import os
+
+# 01. merge data and calculating uncertainty
+counties = ['08013','12057','12081','12115','18163','24005','25001','25003',
+            '25005','25007','25009','25011','25013','25015','25017','25019',
+            '25021','25023','25025','25027','27003','27019','27037','27053',
+            '27123','27163','34025','37119','36005','36047','36061','36081','36085'] 
+
+
+#Out[51]: array([36061, 36047, 36081, 12057, 12081, 12115])
+
+ocmdf =  geopandas.GeoDataFrame()
+for i in range(0,len(counties)):
+   
+    layer = 'ocm_'+ counties[i]
+    layers = geopandas.read_file('D:/DATA/OPENCITYMODEL/ocm_merged_state_'+counties[i][0:2]+".gdb", driver='FileGDB', layer=layer)
+    ocmdf = pd.concat([ocmdf, layers], axis=0)
+ocmgdf = geopandas.GeoDataFrame(ocmdf.drop(['longitude', 'latitude'], axis=1), geometry='geometry')
+ocmgdf=ocmgdf[~ocmgdf.geometry.is_empty]
+
+#for layer in layerlist:
+#    layers[layer] = geopandas.read_file("C:/Yoonjung/Data/ocm_merged_state_08.gdb", driver='FileGDB', layer=layer)
+#ocmdf = pd.concat(layers, axis=0)
+#layerlist = fiona.listlayers('D:/DATA/OPENCITYMODEL/ocm_merged_state_'+counties[3][0:2]+'.gdb')
+#ocmdf = geopandas.read_file("C:/Yoonjung/Data/ocm_merged_state_08.gdb", driver='FileGDB', layer='ocm_08013')
+
+# 1. Try with near function
+# Ztrax selecting building areas 
+
+
+files = []
+for county in counties:
+    file_path = 'C:/Yoonjung/Data/ztrax_county_2021_areatype_new/ztrax_2021_extraction_county_areatypes_'+str(county)+'.csv'  # file path
+    files.append(file_path)
+
+#files = [i for i in glob.glob('C:/Yoonjung/Data/ztrax_2021_extraction_county_areatypes/ztrax_2021_extraction_county_areatypes_'+str(county)+'.csv') ]
+
+df = pd.concat([pd.read_csv(f) for f in files], axis = 0)
+dfremovelatlong = df.drop_duplicates(subset=['PropertyAddressLongitude','PropertyAddressLatitude'])
+maxdf = dfremovelatlong.groupby(['RowID','BuildingOrImprovementNumber'])['BuildingAreaStndCode','BuildingAreaSqFt'].max().reset_index()
+#ztraxdf = pd.merge(maxdf, df, how='left', on =['RowID','BuildingOrImprovementNumber','BuildingAreaStndCode','BuildingAreaSqFt']).drop_duplicates(subset = ['RowID','BuildingOrImprovementNumber','BuildingAreaStndCode','BuildingAreaSqFt'])
+ztraxdf=dfremovelatlong.merge(maxdf,on=['RowID','BuildingOrImprovementNumber','BuildingAreaSqFt'],how='right').drop_duplicates(subset = ['RowID','BuildingOrImprovementNumber','BuildingAreaSqFt'])
+ztraxgdf = geopandas.GeoDataFrame(ztraxdf, geometry=geopandas.points_from_xy(ztraxdf.PropertyAddressLongitude, ztraxdf.PropertyAddressLatitude))
+print(len(ztraxgdf))
+ztraxgdf.plot(markersize = 0.5)
+ztraxgdf.crs = {'init' :'epsg:4326'}
+
+#ztraxgdf = ztraxgdf.set_crs(epsg=4326)
+Ztraxgdf = ztraxgdf.to_crs(ocmgdf.crs)
+#Ztraxgdf=ztraxgdf[~ztraxgdf.geometry.is_empty]
+
+#ztraxdf.to_csv('C:/Yoonjung/Data/ztrax_2021_extraction_county_areatypes/ztrax_2021_extraction_county_areatypes_08001.csv')
+
+#unit change
+#nearest_data = geopandas.sjoin_nearest(Ztraxgdf,ocmgdf,how='left', distance_col="distances")
+#nearsf = nearest_data.to_crs(4326)
+nearest_data = geopandas.sjoin_nearest(Ztraxgdf,ocmgdf,how='left', distance_col="distances", max_distance = 100)
+min_value = nearest_data.groupby(['RowID','BuildingOrImprovementNumber'])['distances'].min().reset_index()
+nearest_data= nearest_data.merge(min_value, on=['RowID','BuildingOrImprovementNumber'],suffixes=('', '_min'))
+nearest_result = nearest_data.loc[nearest_data.distances==nearest_data.distances_min].drop('distances', axis=1).drop_duplicates(subset=['RowID','BuildingOrImprovementNumber','PropertyAddressLongitude','PropertyAddressLatitude'])
+nearsf = nearest_data.loc[(nearest_data.distances==nearest_data.distances_min)|(nearest_data.distances_min.isna())]
+
+nearsf.LotSizeSquareFeet= nearsf.fillna(0).LotSizeSquareFeet.astype('int') 
+nearsf.NoOfStories = nearsf.NoOfStories.replace('1 1/2','1.5').replace('5/2','2.5').replace(' 11/2', '5.5').replace('2 11/2','7.5').replace('1/5','0.5').replace('11/2','5.5').replace('1 3/4','1.75').replace('2 1/2','2.5').replace('21/2','10.5').replace('1/2','0.5').replace('2/1','2').replace('2/1','2').replace('11/2','5.5')
+nearsf.NoOfStories = nearsf.NoOfStories.astype(float)
+nearsf['AreaSqFt'] = nearsf.Shape_Area*10.764
+nearsf.LotSizeSquareFeet= nearsf.fillna(0).LotSizeSquareFeet.astype('int') 
+nearsf['computeheight'] =nearsf.apply(lambda x : x.NoOfStories*4.2672 if x.BuildingAreaSqFt/x.AreaSqFt > 1 else 4.2672, axis = 1) 
+nearsf['diagonal_square_meter'] = nearsf.apply(lambda x: math.sqrt(2)*math.sqrt(x.LotSizeSquareFeet.astype(float))*0.3048, axis = 1)
+
+nearsf.height= nearsf.height.astype('float') 
+
+
+# calculating reliability index
+
+def normalize_column(df):
+    return (df - df.min()) / (df.max() - df.min())
+nearsf['diagonal_square_meter'] = nearsf.apply(lambda x: math.sqrt(2)*math.sqrt(x.LotSizeSquareFeet)*0.3048, axis = 1)
+nearsf['RI'] =normalize_column(nearsf.LotSizeSquareFeet/nearsf.AreaSqFt) + normalize_column(nearsf.diagonal_square_meter/nearsf.distances_min)+ normalize_column(abs(nearsf.height-nearsf.computeheight))+normalize_column(1/nearsf.distances_min)
+nearsf['uncertainty'] =normalize_column(nearsf.AreaSqFt/nearsf.LotSizeSquareFeet) + normalize_column(nearsf.distances_min/nearsf.diagonal_square_meter)+ normalize_column(nearsf.computeheight/nearsf.height)+normalize_column(nearsf.distances_min)
+
+
+# 02. rasterization
+
+import numpy as np
+import pandas as pd
+import scipy.stats
+import subprocess
+from osgeo import gdal
+
+
+target_variable = 'numofbuilding' #'BuildingAreaSqFt' #'uncertainty' 
+xcoo_col,ycoo_col = 'x','y'    
+statistic = np.mean
+statistic_str= 'sum'    
+   
+template_raster = 'C:/Yoonjung/HISTPLUS/raster/BUPL_2015.tif'#PATH_TO_FBUY_RASTER (.tif)
+csv_folder = 'C:/Yoonjung/DATA_USAGE_TUTORIAL/exercises'# path where csv files with input (x,y,target_variable) are stored
+surface_folder = 'C:/Yoonjung/HISTPLUS/raster'#path where output tif files are stored
+bitdepth = gdal.GDT_Int16 ## or gdal.GDT_Float32, whatever is suitable
+crs_coords = '+proj=longlat +ellps=clrk66 +datum=NAD27 +no_defs' #source SRS
+crs_grid = '+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23.0 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs' #target SRS
+
+
+gdal_edit = r'python C:\Users\yoah2447\Anaconda3\envs\geo\Scripts\gdal_edit.py'
+
+def gdalNumpy2floatRaster_compressed(array,outname,template_georef_raster,x_pixels,y_pixels,px_type):
+
+    dst_filename = outname
+
+    driver = gdal.GetDriverByName('GTiff')
+    dataset = driver.Create(dst_filename,x_pixels, y_pixels, 1, px_type)   
+    dataset.GetRasterBand(1).WriteArray(array)                
+    mapraster = gdal.Open(template_georef_raster, gdal.GA_ReadOnly) #should check if works
+    proj=mapraster.GetProjection() #you can get from a existing tif or import 
+    dataset.SetProjection(proj)
+    dataset.FlushCache()
+    dataset=None                
+
+    #set bounding coords
+    ulx, xres, xskew, uly, yskew, yres  = mapraster.GetGeoTransform()
+    lrx = ulx + (mapraster.RasterXSize * xres)
+    lry = uly + (mapraster.RasterYSize * yres)            
+    mapraster = None
+                    
+    gdal_cmd = gdal_edit+' -a_ullr %s %s %s %s "%s"' % (ulx,uly,lrx,lry,outname)
+    print(gdal_cmd)
+    response=subprocess.check_output(gdal_cmd, shell=True)
+    print(response)
+    
+    outname_lzw=outname.replace('.tif','_lzw.tif')
+    gdal_translate = r'gdal_translate %s %s -co COMPRESS=LZW' %(outname,outname_lzw)
+    print(gdal_translate)
+    response=subprocess.check_output(gdal_translate, shell=True)
+    print(response)
+    os.remove(outname)
+    os.rename(outname_lzw,outname)
+    
+    
+    
+#read raster
+raster = gdal.Open(template_raster)
+cols = raster.RasterXSize
+rows = raster.RasterYSize
+geotransform = raster.GetGeoTransform()
+
+
+#read zillow
+
+
+gpdf = nearsf.copy()
+
+
+   
+    
+#read raster
+raster = gdal.Open(template_raster)
+cols = raster.RasterXSize
+rows = raster.RasterYSize
+geotransform = raster.GetGeoTransform()
+
+gpdf = nearsf.copy()
+#gpdf.crs = {'init' :'epsg:4326'}
+#gpdf.geometry = gpdf.geometry.to_crs(crs_grid) #crs_grid , raster.rio.crs
+#gpdf=gpdf[~gpdf.geometry.is_empty]
+gpdf['numofbuilding'] = 1
+
+ulx, xres, xskew, uly, yskew, yres  = raster.GetGeoTransform() # ulx, uly is the upper left corner, lrx, lry is the lower right corner
+lrx = ulx + (raster.RasterXSize * xres)
+lry = uly + ( raster.RasterYSize * yres)
+topleftX = geotransform[0]
+topleftY = geotransform[3]
+pixelWidth = int(abs(geotransform[1]))
+pixelHeight = int(abs(geotransform[5]))
+x_range = np.arange(ulx,lrx,pixelWidth) #setting grid spacing for x and y gpdf.geometry.x.values.max()
+y_range = np.arange(lry,uly,pixelHeight)
+rasterrange=[[topleftX,topleftX+pixelWidth*cols],[topleftY-pixelHeight*rows,topleftY]]    
+
+y=gpdf.geometry.y.values.astype(int)
+x= gpdf.geometry.x.values.astype(int)
+#z= target_variable
+statsvals = gpdf[target_variable].values.astype(int)  
+
+#making raster
+xbins, ybins = len(x_range), len(y_range) #number of bins in each dimension
+#H, xedges, yedges, binnumber =  scipy.stats.binned_statistic_2d(gpdf.geometry.x.values,gpdf.geometry.y.values,statsvals,statistic='min',bins = [xbins, ybins])  
+
+
+out_surface =np.zeros((cols,rows)).astype(np.float32)
+out_surfcace = np.zeros((len(x_range),len(y_range))).astype(np.float32)
+curr_surface = scipy.stats.binned_statistic_2d(gpdf.geometry.x.values,gpdf.geometry.y.values,statsvals,statistic=statistic_str,bins = [xbins, ybins],range=rasterrange)        
+out_surface = np.maximum(out_surface,np.nan_to_num(curr_surface.statistic))       
+
+
+gdalNumpy2floatRaster_compressed(np.rot90(out_surface),'C:/Yoonjung/Data/rasteroutcome/'+'33counties_surface_%s_%s.tif' %(target_variable,statistic_str),template_raster,cols,rows,bitdepth)
+
+
+
+#ploting 
+#XX, YY = np.meshgrid(xedges, yedges)
+
+fig = plt.figure(figsize = (13,7))
+ax1=plt.subplot(111)
+ax1.set_ylim(1500000,2200000)
+ax1.set_xlim(-1200000,-500000) 
+#plot1 = ax1.pcolormesh(XX,YY,H.T)
+#cbar = plt.colorbar(plot1,ax=ax1, pad = .015, aspect=10)
+plt.show()
+
+
+#https://stackoverflow.com/questions/67757113/how-do-i-count-the-number-of-vector-geometry-that-intersect-a-raster-cell
+#https://pypi.org/project/rasterstats/0.7.1/
+
+
+
+#compare it with MTBF
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+### the data stack
+#grided MTBF data
+ref_bldg_count_arr = np.load(r'C:\Yoonjung\Data\MTBF\hist2d_refbldg_counts_noPolygDuplNoSmallPolyg2_2022_incl_nyc.npz')
+ref_bldg_count_arr = ref_bldg_count_arr['arr_0']
+
+### county ids rasterized:
+loaded = np.load(r'C:\Yoonjung\Data\MTBF\counties_rast250.npz')
+counties_rast =  loaded['counties_rast250'].flatten()
+
+
+DF = pd.DataFrame()
+DF['county'] = counties_rast
+DF['county'] = DF['county'].astype(int) 
+years=range(1810,2016,5)
+for year in years:
+    ### now load your gridded surface for year x as a numpy array, than flatten it
+    ### get the area within relevant counties FIPS:
+    refbldgcounts_curryr = np.rot90(ref_bldg_count_arr[:,:,list(years).index(year)]).flatten()
+    ### I would create a pandas dataframe with three columns, your counts, the refbldgcounts_curryr, and counties_rast.
+    DF[year]=refbldgcounts_curryr 
+    ### each row represents a grid cell
+    ### then group by counties_rast column for county-level analysis
+
+#mtbfdf = DF.copy()
+#mtbfdf['totalnumMTBF'] = mtbfdf.iloc[:,1:].sum(axis=1, skipna=True)
+
+plt.scatter(x = DF[2015], y = df['numofbuildings'])
+plt.xlabel('mtbf')
+plt.ylabel('ztrax_ocm')
+
+
+#comparison test
+#from sklearn.metrics import precision_recall_fscore_support
+#np.corrcoef(mtbfdf[2015], df['numofbuildings'])
+DF['numofbuildings'] =  np.rot90(out_surface).flatten() #np.rot90(out_surface).flatten()
+test = DF[['numofbuildings','county']].loc[DF['numofbuildings']>0]
+test =pd.DataFrame(test)
+select = DF[['county',2015,'numofbuildings']]
+completedf =select.loc[(select.numofbuildings>0)&(select[2015]>0)]
+completeDF = completedf[completedf["county"].isin([int(s) for s in counties])]   
+
+
+
+# compare by counties aggregate them
+
+countydf = completeDF.groupby('county').sum().iloc[:,0:2]#.reset_index()
+#countydf.county = countydf.county.astype(str)
+countydf.columns =['MTBF(2015)','OCM_Ztrax']
+countydf.plot(kind="bar")
+plt.xlabel("County")
+plt.ylabel("number of buildings")
+
+
+
+#correlation by counties
+
+
+import matplotlib.pyplot as plt
+import plotly.express as px
+import seaborn as sns
+corrdf = completeDF.iloc[:,0:3].reset_index().drop(['index'], axis=1)
+corrresults = corrdf[['county']].drop_duplicates('county')
+
+
+#corrdf.groupby(['county'])['numofbuildings',2015].sum()
+
+corroptions = ['pearson', 'kendall', 'spearman']
+for corroption in corroptions:
+    L = []
+    for county in corrresults['county'] : 
+        corrDF = corrdf.loc[corrdf.county == int(county)]
+        corr = round(corrDF.corr(method=corroption).iloc[1,2],2)
+        #corr = np.corrcoef(corrDF[2015], corrDF['numofbuildings'])[1][0]
+        L.append(corr)
+    corrresults[corroption] = 0 
+    corrresults[corroption]  = L
+
+sorted_df = corrresults.sort_values(by='county', ascending=True)
+
+sorted_df.iloc[:,0:2].set_index('county').plot(kind="bar")
+
+corrresultspivot = corrresults.set_index('county').stack().reset_index()
+corrresultspivot.columns = ['county','correlation','value']
+corrresultspivot.county = corrresultspivot.county.astype(str)
+ax = sns.stripplot( y="value", x="county",  hue="correlation",
+                   data=corrresultspivot, palette="Set2", dodge=True)
+ax.set_xticklabels(corrresultspivot.county.unique(), fontsize=14, rotation=90);
+ax.set_xticklabels(corrresultspivot.county.unique(), fontsize=14, rotation=90, ha= 'right');
+
+
+
+corrDF =corrdf.loc[corrdf.county == int(corrresults['county'].iloc[1])]
+round(corrDF.corr(method=corroption).iloc[1,2],2)
+
+
+
+
+
