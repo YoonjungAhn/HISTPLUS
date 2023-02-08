@@ -73,6 +73,14 @@ countydf.fips
 countyDF = countydf.loc[(countydf.state!="AK")&(countydf.state!="HI")&(countydf.fips!=46113)&(countydf.fips!=51515)]
 countyDF.fips= countyDF.fips.apply(lambda x: '{0:0>5}'.format(x))
 counties = list(countyDF.fips.apply(lambda x: '{0:0>5}'.format(x)).unique())
+statDF =pd.read_csv('D:\DATA\ZTRAX_completeness_summary/OPZdataprocesssummary.csv')
+statDF['fips'] = statDF['fips'].apply(lambda x: '{0:0>5}'.format(x))
+statDF = statDF[[ 'fips', 'totalztrax',
+       'totalocm', 'totalparcel', 'incompleteztrax', 'OP_intersect',
+       'OP_distance', 'P', 'O', 'Z', 'PZ11', 'OZ11', 'OP11', 'OPZ111', 'PZ1n',
+       'OZ1n', 'OPn1', 'OPZn1n', 'OPtotalmerge', 'OPZ_address',
+       'OPZ_intersect', 'OPZ_distance', 'finalunmatchedZ', 'unmatchedOPwithZ',
+       'OPZtotalmerge']]
 
 statDF = pd.DataFrame({'fips':counties,'totalztrax':np.nan,'totalocm':np.nan,'totalparcel':np.nan,'incompleteztrax':np.nan,'OP_intersect':np.nan, 'OP_distance': np.nan,
                        'P':np.nan,'O':np.nan,'Z':np.nan,'PZ11':np.nan,'OZ11':np.nan,'OP11':np.nan,'OPZ111':np.nan, 'PZ1n':np.nan, 
@@ -81,26 +89,45 @@ statDF = pd.DataFrame({'fips':counties,'totalztrax':np.nan,'totalocm':np.nan,'to
                        'unmatchedOPwithZ':np.nan,'OPZtotalmerge':np.nan})
 
 
-counties.index( '12101') #conty = '01009'
-#integrating OCM and Parcel 
-for county in counties[342:]:
+#read pacel+ztrax
+countydf = pd.read_csv('D:/DATA/countyFIPS.csv')
+countydf.fips
+countyDF = countydf.loc[(countydf.state!="AK")&(countydf.state!="HI")&(countydf.fips!=46113)&(countydf.fips!=51515)]
+countyDF.fips= countyDF.fips.apply(lambda x: '{0:0>5}'.format(x))
+counties = list(countyDF.fips.apply(lambda x: '{0:0>5}'.format(x)).unique())
+statDF =pd.read_csv('D:\DATA\ZTRAX_completeness_summary/OPZdataprocesssummary.csv')
+statDF['fips'] = statDF['fips'].apply(lambda x: '{0:0>5}'.format(x))
+statDF = statDF[[ 'fips', 'totalztrax',
+       'totalocm', 'totalparcel', 'incompleteztrax', 'OP_intersect',
+       'OP_distance', 'P', 'O', 'Z', 'PZ11', 'OZ11', 'OP11', 'OPZ111', 'PZ1n',
+       'OZ1n', 'OPn1', 'OPZn1n', 'OPtotalmerge', 'OPZ_address',
+       'OPZ_intersect', 'OPZ_distance', 'finalunmatchedZ', 'unmatchedOPwithZ',
+       'OPZtotalmerge']]
+
+counties.index( '51683') #conty = '01009' #memory issue : 17043,48409, 35001 38027 38087 46137#no OCM : 21145
+for county in counties[2899:]:
     start_time = time.time()
     
     #reading in OCM
     ocmdf =  geopandas.GeoDataFrame()
     layer = 'ocm_'+ county
-    layers = geopandas.read_file('D:/DATA/OPENCITYMODEL/ocm_merged_state_'+county[0:2]+".gdb", driver='FileGDB', layer=layer)
-    ocmdf = pd.concat([ocmdf, layers], axis=0)
-    OCMgdfprj = ocmdf.to_crs( 'epsg:4269')
-    ocmgdf = geopandas.GeoDataFrame(OCMgdfprj.drop(['longitude', 'latitude'], axis=1), geometry='geometry')
-    #ocmgdf=ocmgdf[ocmgdf.geometry.is_empty].fillna(value=np.nan)
-    ocmgdf['ocm_polygon_geometry']= ocmgdf.geometry.apply(lambda x: wkt.dumps(x))
-    ocmgdf['ocm_point_geometry'] = ocmgdf['geometry'].centroid.apply(lambda x: wkt.dumps(x))
-    OCMgdf = ocmgdf.copy()
-    OCMgdf['geometry'] = OCMgdf['geometry'].centroid
-
-    OCM = OCMgdf[['gml_id', 'state','county','height','Shape_Area','ocm_polygon_geometry','ocm_point_geometry','geometry']]
-    statDF['totalocm'].loc[statDF['fips']==county] = len(OCM)
+    try : 
+        layers = geopandas.read_file('D:/DATA/OPENCITYMODEL/ocm_merged_state_'+county[0:2]+".gdb", driver='FileGDB', layer=layer)
+        ocmdf = pd.concat([ocmdf, layers], axis=0)
+        OCMgdfprj = ocmdf.to_crs( 'epsg:4269')
+        ocmgdf = geopandas.GeoDataFrame(OCMgdfprj.drop(['longitude', 'latitude'], axis=1), geometry='geometry')
+        #ocmgdf=ocmgdf[ocmgdf.geometry.is_empty].fillna(value=np.nan)
+        ocmgdf['ocm_polygon_geometry']= ocmgdf.geometry.apply(lambda x: wkt.dumps(x))
+        ocmgdf['ocm_point_geometry'] = ocmgdf['geometry'].centroid.apply(lambda x: wkt.dumps(x))
+        OCMgdf = ocmgdf.copy()
+        OCMgdf['geometry'] = OCMgdf['geometry'].centroid
+        
+        OCM = OCMgdf[['gml_id', 'state','county','height','Shape_Area','ocm_polygon_geometry','ocm_point_geometry','geometry']]
+        statDF['totalocm'].loc[statDF['fips']==county] = len(OCM)
+    except ValueError:
+        ocmgdf =geopandas.GeoDataFrame()
+        OCM = geopandas.GeoDataFrame(columns=['gml_id', 'state','county','height','Shape_Area','ocm_polygon_geometry','ocm_point_geometry','geometry'], geometry='geometry')
+        statDF['totalocm'].loc[statDF['fips']==county] = len(OCM)
     
     #reading in parcel 
     parcel_file_path = 'D:/DATA/ParcelAtlas2022/'+county+'/parcels.shp'  # file path
@@ -161,14 +188,14 @@ for county in counties[342:]:
                 parcel['SALES_PRIC'] = np.nan                   
         if 'LOT_SIZE' not in parcel:
                 parcel['LOT_SIZE'] = np.nan     
-                
+        
         parcel.rename(columns={'Xcoord':'XCOORD', 'Ycoord':'YCOORD'}, inplace=True)
         parcel['unique_APN'] = range(0,len(parcel))
         parcel['FIPS'] = parcel['FIPS'].replace(np.nan, county)
         parcel.crs = {'init' :'epsg:4269'}
         #parcelprj = parcel.to_crs( OCM.crs).replace([0], np.nan).fillna(value=np.nan).dropna(subset = ['geometry'])
         
-           
+        
         Parcel =  parcel[['unique_APN','APN', 'APN2', 'STATE', 'COUNTY', 'FIPS', 'SIT_HSE_NU', 'SIT_DIR',
                'SIT_STR_NA', 'SIT_STR_SF', 'SIT_FULL_S', 'SIT_CITY', 'SIT_STATE',
                'SIT_ZIP', 'SIT_ZIP4', 'LAND_VALUE', 'IMPR_VALUE', 'TOT_VALUE',
@@ -178,8 +205,8 @@ for county in counties[342:]:
         Parcel['parcel_polygon_geometry'] = Parcel.geometry.apply(lambda x: wkt.dumps(x))
         Parcel['parcel_point_geometry'] = Parcel['geometry'].centroid.apply(lambda x: wkt.dumps(x))
         #Parcel['geometry'] = Parcel['geometry'].centroid
-         
-            
+        
+        
         statDF['totalparcel'].loc[statDF['fips']==county] = len(Parcel)
         
         #intersection spatial join
@@ -191,11 +218,11 @@ for county in counties[342:]:
         instersectdf.loc[(instersectdf.gml_id.notna())&(instersectdf.unique_APN.notna())&(instersectdf.unique_APN.duplicated()==True), 'integrationcode'] ='OPn1'
         instersectdf['integrationcode'].unique()
         statDF['OP_intersect'].loc[statDF['fips']==county] = len(instersectdf.loc[(instersectdf.integrationcode!="O")|(instersectdf.integrationcode!="P")])
-   
-    except fiona.errors.DriverError:
+    
+    except (fiona.errors.DriverError):
         statDF['totalparcel'].loc[statDF['fips']==county] = 0
         statDF['OP_intersect'].loc[statDF['fips']==county] = len(ocmgdf)
-    
+        
         instersectdf = ocmgdf.copy()
         instersectdf['integrationcode']=np.nan
         instersectdf.loc[(instersectdf.gml_id.isna()), 'integrationcode'] = 'O'
@@ -214,18 +241,18 @@ for county in counties[342:]:
                'YEAR_BUILT', 'STD_LAND_U', 'LOT_SIZE', 'BLDG_AREA', 'NO_OF_STOR',
                'NO_OF_UNIT', 'BEDROOMS', 'BATHROOMS', 'XCOORD', 'YCOORD',
                'parcel_polygon_geometry', 'parcel_point_geometry', 'integrationcode']]
-
+    
     #unmatched OCM
     unmatchedocm = OCM[~(OCM.gml_id.isin(instersectdf.gml_id))][['gml_id', 'state', 'county', 'height', 'Shape_Area',
            'ocm_polygon_geometry', 'ocm_point_geometry', 'geometry']]
     #unmatchedocm =  instersectdf.loc[instersectdf.integrationcode=="O"][['gml_id', 'state', 'county', 'height', 'Shape_Area',
     #       'ocm_polygon_geometry', 'ocm_point_geometry', 'geometry']]
-
+    
     try: 
         #unmatched parcel 
         unmatchedparcel=   Parcel[~(Parcel.unique_APN.isin(instersectdf.unique_APN))]
-    
-        if (len(unmatchedocm)==0)&(len(unmatchedparcel)>0):
+        
+        if ((len(unmatchedocm)==0)&(len(unmatchedparcel)>=0)):
             #unmatchedparcel['geometry'] = unmatchedparcel['geometry'].centroid
             unmatchedparcel[['gml_id', 'state', 'county', 'height', 'Shape_Area',
                   'ocm_polygon_geometry', 'ocm_point_geometry']] =  pd.DataFrame([np.repeat(np.nan, 7)], index=unmatchedparcel.index)
@@ -247,6 +274,32 @@ for county in counties[342:]:
             OPdf.to_csv('D:/DATA/00_ParcelOCMMerge/parcelocm_'+county+'.csv')
            #test = OPdf[OPdf.duplicated('gml_id')]
         
+        elif ((len(unmatchedocm)>=0)&(len(unmatchedparcel)==0)):
+            unmatchedocm[[ 'unique_APN','APN', 'APN2', 'STATE',
+            'COUNTY', 'FIPS', 'SIT_HSE_NU', 'SIT_DIR', 'SIT_STR_NA', 'SIT_STR_SF',
+            'SIT_FULL_S', 'SIT_CITY', 'SIT_STATE', 'SIT_ZIP', 'SIT_ZIP4',
+            'LAND_VALUE', 'IMPR_VALUE', 'TOT_VALUE', 'SALES_PRIC', 'YEAR_BUILT',
+            'STD_LAND_U', 'LOT_SIZE', 'BLDG_AREA', 'NO_OF_STOR', 'NO_OF_UNIT',
+            'BEDROOMS', 'BATHROOMS', 'XCOORD', 'YCOORD',
+            'parcel_polygon_geometry', 'parcel_point_geometry']] =  pd.DataFrame([np.repeat(np.nan, 31)], index=unmatchedocm.index)
+            unmatchedocm['integrationcode'] = np.nan
+            unmatchedocm['integrationcode'] = 'O'
+            unmatchedocm =  unmatchedocm[  unmatchedocm.columns]
+            unmatchedocm['geometry'] = geopandas.GeoSeries.from_wkt(unmatchedocm.ocm_polygon_geometry)
+            OPdf = pd.concat( [ instersectdf,   unmatchedocm], axis =0) #.drop(['index_left'],axis=1)
+            statDF['OPtotalmerge'].loc[statDF['fips']==county] = len(OPdf)
+            OPdf = geopandas.GeoDataFrame(OPdf, crs="EPSG:4326", geometry=OPdf.geometry)
+            OPdf= OPdf.to_crs('epsg:4269')
+            OPdf = OPdf[['gml_id', 'state', 'county', 'height', 'Shape_Area',
+                   'ocm_polygon_geometry', 'ocm_point_geometry', 'unique_APN','APN', 'APN2', 'STATE',
+                   'COUNTY', 'FIPS', 'SIT_HSE_NU', 'SIT_DIR', 'SIT_STR_NA', 'SIT_STR_SF',
+                   'SIT_FULL_S', 'SIT_CITY', 'SIT_STATE', 'SIT_ZIP', 'SIT_ZIP4',
+                   'LAND_VALUE', 'IMPR_VALUE', 'TOT_VALUE', 'SALES_PRIC', 'YEAR_BUILT',
+                   'STD_LAND_U', 'LOT_SIZE', 'BLDG_AREA', 'NO_OF_STOR', 'NO_OF_UNIT',
+                   'BEDROOMS', 'BATHROOMS', 'XCOORD', 'YCOORD', 'geometry',
+                   'parcel_polygon_geometry', 'parcel_point_geometry', 'integrationcode']]
+            
+            
         else:      #(len(unmatchedocm)>0)&(len(unmatchedparcel)>0):    
             matcheddf = pd.DataFrame()
             X = len(unmatchedocm)
@@ -287,7 +340,7 @@ for county in counties[342:]:
                    'BEDROOMS', 'BATHROOMS','XCOORD', 'YCOORD','parcel_polygon_geometry', 'parcel_point_geometry']] =  pd.DataFrame([np.repeat(np.nan, 31)], index=finalunmatchedocm.index)
             Finalunmatchedocm= finalunmatchedocm[instersectdf.columns]
             OPdf =  pd.concat([ instersectdf, Matcheddf, finalunmatchedparcel, Finalunmatchedocm], axis =0)
-
+            
             
             OPdf.loc[ (OPdf.gml_id.isna()), 'integrationcode'] = 'P'
             OPdf.loc[( OPdf.unique_APN.isna()), 'integrationcode'] = 'O'
@@ -295,7 +348,7 @@ for county in counties[342:]:
             OPdf.loc[( OPdf.gml_id.notna())&( OPdf.unique_APN.notna())&( OPdf.unique_APN.duplicated()==True), 'integrationcode'] ='OPn1'
             #OPdf.groupby('integrationcode')['unique_APN',"gml_id"].count()
             
-           
+            
             statDF['OPtotalmerge'].loc[statDF['fips']==county] = len(OPdf)
             OPdf.to_csv('D:/DATA/00_ParcelOCMMerge/parcelocm_'+county+'.csv')
             del  nearestDAT, nearest_data
@@ -304,9 +357,11 @@ for county in counties[342:]:
         
         if  (len(unmatchedocm)==0):
             OPdf = instersectdf.copy()
+            statDF['OP_distance'].loc[statDF['fips']==county] =0
+            
             OPdf.loc[OPdf['integrationcode']=="O", 'geometry'] = geopandas.GeoSeries.from_wkt(OPdf.loc[OPdf['integrationcode']=="O"].ocm_polygon_geometry)
             OPdf.to_csv('D:/DATA/00_ParcelOCMMerge/parcelocm_'+county+'.csv')
-            
+        
         else:
             unmatchedocm['integrationcode'] = np.nan
             unmatchedocm['integrationcode'] = 'O'
@@ -331,22 +386,22 @@ for county in counties[342:]:
                    'BEDROOMS', 'BATHROOMS', 'XCOORD', 'YCOORD', 'geometry',
                    'parcel_polygon_geometry', 'parcel_point_geometry', 'integrationcode']]
             statDF['OPtotalmerge'].loc[statDF['fips']==county] = len(OPdf)
-    
+            
             OPdf.to_csv('D:/DATA/00_ParcelOCMMerge/parcelocm_'+county+'.csv')
-        
-    
+
+
 
 
 #integrating OCM and Parcel and ZTRAX (need to use unique APN)
     
-
-
+    
+    
     file_path = 'D:\DATA\ztrax_county_2021_areatype_new/ztrax_2021_extraction_county_areatypes_'+county+'.csv'  # file path
     
     DF = pd.read_csv(file_path)
     if 'BuildingAreaSqFt' not in DF:
         DF['BuildingAreaSqFt'] = np.nan
-
+    
     maxdf = DF.groupby(['RowID','BuildingOrImprovementNumber'])['BuildingAreaSqFt'].max().reset_index()
     if len(maxdf)==0:
         ztraxdf=DF.drop_duplicates(subset = ['RowID','BuildingOrImprovementNumber','BuildingAreaSqFt'])
@@ -356,9 +411,9 @@ for county in counties[342:]:
     ZtraxDF=sumareas.merge(ztraxdf,on=['PropertyAddressLongitude','PropertyAddressLatitude','BuildingAreaSqFt','RowID'],how='left')
     ZtraxDF['FIPS'] =  ZtraxDF['FIPS'].astype(str).str[:-2].apply(lambda x: '{0:0>5}'.format(x)).replace('0000n',county)
     ZtraxgDF = geopandas.GeoDataFrame(ZtraxDF, geometry=geopandas.points_from_xy(ZtraxDF.PropertyAddressLongitude, ZtraxDF.PropertyAddressLatitude))
-
+    
     ZtraxgDF.crs = {'init' :'epsg:4326'}
-    ZtraxgDFprj = ZtraxgDF.to_crs( OPdf.crs).replace([0], np.nan)
+    ZtraxgDFprj = ZtraxgDF.to_crs( 'epsg:4269').replace([0], np.nan)
     ZtraxgDFprj['ztrax_point_geometry'] = ZtraxgDFprj.geometry.apply(lambda x: wkt.dumps(x))
     statDF['totalztrax'].loc[statDF['fips']==county] = len(ZtraxgDF)
     
@@ -371,7 +426,7 @@ for county in counties[342:]:
             addressdf =ZtraxgDFprj['ztrax_address'].str.extract(pat)
         except AttributeError:
             addressdf = pd.DataFrame(None, index=list(range(0,len(ZtraxgDFprj))), columns=['number','street'])
-
+        
         ZtraxgDFprj['ztrax_address'] = addressdf['number']+''+ addressdf['street']
         Ztraxselect = ZtraxgDFprj[['RowID','PropertyAddressLongitude', 'PropertyAddressLatitude','LotSizeSquareFeet','ztrax_address','FIPS',
                'BuildingAreaSqFt','YearBuilt', 'PropertyZip','PropertyLandUseStndCode','ztrax_point_geometry','geometry']]
@@ -380,46 +435,48 @@ for county in counties[342:]:
         statDF['incompleteztrax'].loc[statDF['fips']==county] = len(ZTRAXincomplete)
         
         if (len(OPdf)==0&len(ZTRAXincomplete)==0):
-            Ztraxselect = ZtraxgDFprj[['RowID', 'PropertyAddressLongitude', 'PropertyAddressLatitude','LotSizeSquareFeet', 
+            Ztraxselect = ZtraxgDFprj[['RowID', 'PropertyAddressLongitude', 'PropertyAddressLatitude','LotSizeSquareFeet', 'PropertyZip', 
+                                       'PropertyLandUseStndCode',
              'ztrax_address', 'FIPS', 'BuildingAreaSqFt','YearBuilt','ztrax_point_geometry','geometry']]
             Ztraxselect['integrationcode'] = np.nan
             Ztraxselect['integrationcode'] = 'Z'
-            
-            Ztraxselect[['gml_id', 'state', 'county', 'height', 'Shape_Area',
+            Ztraxselect2 = Ztraxselect.copy()
+            Ztraxselect2[['gml_id', 'state', 'county', 'height', 'Shape_Area',
                    'ocm_polygon_geometry', 'ocm_point_geometry', 'APN', 'APN2', 'STATE',
                    'COUNTY', 'FIPS', 'SIT_HSE_NU', 'SIT_DIR', 'SIT_STR_NA', 'SIT_STR_SF',
                    'SIT_FULL_S', 'SIT_CITY', 'SIT_STATE', 'SIT_ZIP', 'SIT_ZIP4',
                    'LAND_VALUE', 'IMPR_VALUE', 'TOT_VALUE', 'SALES_PRIC', 'YEAR_BUILT',
                    'STD_LAND_U', 'LOT_SIZE', 'BLDG_AREA', 'NO_OF_STOR', 'NO_OF_UNIT',
                    'BEDROOMS', 'BATHROOMS', 'XCOORD', 'YCOORD', 
-                   'parcel_polygon_geometry', 'parcel_point_geometry']]=  pd.DataFrame([np.repeat(np.nan, 37)], index=Ztraxselect.index)
-            OPZ = Ztraxselect[finalcols]
+                   'parcel_polygon_geometry', 'parcel_point_geometry','uncertainty']]=  pd.DataFrame([np.repeat(np.nan, 38)], index=Ztraxselect2.index)
+            OPZ = Ztraxselect2[finalcols]
             
             OPZ.loc[(OPZ['integrationcode'] =="Z"),'geometry'] =  geopandas.GeoSeries.from_wkt(OPZ.loc[(OPZ['integrationcode'] =="Z")].ztrax_point_geometry)
             OPZ["Long"] = OPZ.geometry.map(lambda p: p.x)
             OPZ["Lat"] =  OPZ.geometry.map(lambda p: p.y)
-           
+            
             statDF['OPZtotalmerge'].loc[statDF['fips']==county] = len( OPZ )
             OPZ.to_csv('D:/DATA/01_ParcelOCMZtraxMerge/parcelocmztraxmerge_'+county+'.csv')
-            
-            
+        
+        
         elif len(OPdf)==0:
-            Ztraxselect = ZtraxgDFprj[['RowID', 'PropertyAddressLongitude', 'PropertyAddressLatitude','LotSizeSquareFeet', 
+            Ztraxselect = ZtraxgDFprj[['RowID', 'PropertyAddressLongitude', 'PropertyAddressLatitude','LotSizeSquareFeet', 'PropertyZip', 
+                                       'PropertyLandUseStndCode',
              'ztrax_address', 'FIPS', 'BuildingAreaSqFt','YearBuilt','ztrax_point_geometry','geometry']]
-
+            
             Ztraxselect['integrationcode'] = np.nan
             Ztraxselect['integrationcode'] = 'Z'
-            
-            Ztraxselect[['gml_id', 'state', 'county', 'height', 'Shape_Area',
+            Ztraxselect2 =  Ztraxselect.copy()
+            Ztraxselect2[['gml_id', 'state', 'county', 'height', 'Shape_Area',
                    'ocm_polygon_geometry', 'ocm_point_geometry', 'unique_APN','APN', 'APN2', 'STATE',
                    'COUNTY', 'FIPS', 'SIT_HSE_NU', 'SIT_DIR', 'SIT_STR_NA', 'SIT_STR_SF',
                    'SIT_FULL_S', 'SIT_CITY', 'SIT_STATE', 'SIT_ZIP', 'SIT_ZIP4',
                    'LAND_VALUE', 'IMPR_VALUE', 'TOT_VALUE', 'SALES_PRIC', 'YEAR_BUILT',
                    'STD_LAND_U', 'LOT_SIZE', 'BLDG_AREA', 'NO_OF_STOR', 'NO_OF_UNIT',
                    'BEDROOMS', 'BATHROOMS', 'XCOORD', 'YCOORD', 
-                   'parcel_polygon_geometry', 'parcel_point_geometry']]=  pd.DataFrame([np.repeat(np.nan, 38)], index=Ztraxselect.index)
-            OPZ = Ztraxselect[finalcols]
-
+                   'parcel_polygon_geometry', 'parcel_point_geometry', 'uncertainty']]=  pd.DataFrame([np.repeat(np.nan, 39)], index=Ztraxselect2.index)
+            OPZ = Ztraxselect2[finalcols]
+            
             OPZ.loc[(OPZ['integrationcode'] =="Z"),'geometry'] =  geopandas.GeoSeries.from_wkt(OPZ.loc[(OPZ['integrationcode'] =="Z")].ztrax_point_geometry)
             OPZ["Long"] = OPZ.geometry.map(lambda p: p.x)
             OPZ["Lat"] =  OPZ.geometry.map(lambda p: p.y)
@@ -433,7 +490,7 @@ for county in counties[342:]:
                    'LotSizeSquareFeet', 'ztrax_address', 'FIPS', 'BuildingAreaSqFt',
                    'YearBuilt', 'PropertyZip', 'PropertyLandUseStndCode',
                    'ztrax_point_geometry', 'geometry']]=  pd.DataFrame([np.repeat(np.nan, 12)], index=Mergedwithadd.index)
-            
+        
         else:
             OPdf['FIPS'] = county
             Mergedwithadd = pd.merge( Ztraxselect.dropna(subset = ['ztrax_address','FIPS']), OPdf.dropna(subset = ['SIT_FULL_S',"FIPS"]), left_on=['ztrax_address',"FIPS"], right_on=['SIT_FULL_S',"FIPS"], how = 'inner').drop_duplicates(subset ='RowID', keep='first' ).dropna(subset = ['RowID'])
@@ -443,8 +500,8 @@ for county in counties[342:]:
             statDF['OPZ_address'].loc[statDF['fips']==county] = len(Mergedwithadd )
             Mergedwithadd.rename(columns={'geometry_y':'geometry'}, inplace=True)
             Mergedwithadd = Mergedwithadd.drop(['geometry_x'], axis=1)
-
-            
+       
+       
        #select unmatched ztrax with addresses
         #Mergedwithadd['integrationcode']= np.nan
         #unmatchedwithadd = Mergedwithadd.loc[( Mergedwithadd['integrationcode']=='Z')]
@@ -455,7 +512,7 @@ for county in counties[342:]:
         
         except KeyError:
             unmatchedop =   OPdf[~(OPdf.APN.isin(Mergedwithadd.APN))|~(OPdf.gml_id.isin(Mergedwithadd.gml_id))]
-            
+        
         unmatchedztrax =   Ztraxselect[~(Ztraxselect.RowID.isin((Mergedwithadd.RowID)))|~(Ztraxselect.RowID.isin((Mergedwithadd.RowID)))]
         #instersectopz = geopandas.sjoin(unmatchedztrax, unmatchedop, how='right', op='intersects') #.sort_values("Uncertainty", ascending = True).drop_duplicates(subset ='RowID', keep='first' )
         instersectopz = geopandas.sjoin(unmatchedztrax, unmatchedop, how='inner', op='intersects') #.sort_values("Uncertainty", ascending = True).drop_duplicates(subset ='RowID', keep='first' )
@@ -465,7 +522,7 @@ for county in counties[342:]:
         bestmatchopz =  instersectopz.sort_values("uncertainty", ascending = True).drop_duplicates(subset ='RowID', keep='first').drop(['FIPS_left','FIPS_right'],axis=1).dropna(subset = ['RowID'])
         bestmatchopz['FIPS'] = county
         statDF['OPZ_intersect'].loc[statDF['fips']==county] = len(bestmatchopz)
-                    
+        
         
         #Nearest match
         #find unmatched
@@ -473,7 +530,7 @@ for county in counties[342:]:
             unmatchedop2 =   OPdf[~(OPdf.APN.isin(bestmatchopz.APN))|~(OPdf.gml_id.isin(bestmatchopz.gml_id))].drop(['index_left'],axis=1)
         except KeyError:
             unmatchedop2 =   OPdf[~(OPdf.APN.isin(bestmatchopz.APN))|~(OPdf.gml_id.isin(bestmatchopz.gml_id))]
-            
+        
         unmatchedztrax2 =   unmatchedztrax[~(unmatchedztrax.RowID.isin((bestmatchopz.RowID)))|~(unmatchedztrax.RowID.isin((bestmatchopz.RowID)))]
         print(len(unmatchedop2),len(unmatchedztrax2))
         
@@ -485,7 +542,10 @@ for county in counties[342:]:
                nearest_data = geopandas.sjoin_nearest( unmatchedop2,unmatchedztrax2,how='inner', distance_col="distances", max_distance = 100) #.dropna(subset=['gml_id'])        
                nearest_data['AreaSqFt'] = nearest_data.Shape_Area*10.764
                nearest_data.LotSizeSquareFeet=nearest_data.fillna(0).LotSizeSquareFeet.astype('int') 
-               nearest_data['diagonal_square_meter'] = nearest_data.apply(lambda x: math.sqrt(2)*math.sqrt(x.LotSizeSquareFeet)*0.3048, axis = 1)
+               try:
+                   nearest_data['diagonal_square_meter'] = nearest_data.apply(lambda x: math.sqrt(2)*math.sqrt(x.LotSizeSquareFeet)*0.3048, axis = 1)
+               except ValueError:
+                   nearest_data['diagonal_square_meter'] = np.nan
                min_value = nearest_data.groupby(['PropertyAddressLongitude','PropertyAddressLatitude'])['distances'].min().reset_index()
                nearest_data= nearest_data.merge(min_value, on=['PropertyAddressLongitude','PropertyAddressLatitude'],suffixes=('', '_min')) #.drop_duplicates(subset=['uniqueID'])
                nearest_data['uncertainty'] =normalize_column(nearest_data.AreaSqFt/nearest_data.LotSizeSquareFeet) + normalize_column(nearest_data.distances_min/nearest_data.diagonal_square_meter)+normalize_column(nearest_data.distances_min)
@@ -502,7 +562,7 @@ for county in counties[342:]:
                    break
             Matcheddf = matcheddf.drop(['AreaSqFt', 'diagonal_square_meter'],axis=1)
             statDF['OPZ_distance'].loc[statDF['fips']==county] = len(Matcheddf)
-     
+        
         else : 
             matcheddf = pd.DataFrame()
             X = len(unmatchedztrax2)
@@ -525,11 +585,11 @@ for county in counties[342:]:
                if  (X ==X)or(X==0):
                    break
             Matcheddf = matcheddf #.drop(['index_left'],axis=1)
-
+            
             statDF['OPZ_distance'].loc[statDF['fips']==county] = len(Matcheddf)
-
-
-
+        
+        
+        
         #merge everything
         unmatchedop3 = unmatchedop2[~(unmatchedop2.unique_APN.isin( matcheddf.unique_APN))|~(unmatchedop2.gml_id.isin(matcheddf.gml_id))] #.dropna(subset=['unique_APN','gml_id'])
         
@@ -548,7 +608,7 @@ for county in counties[342:]:
             missingop = mergematched[~(mergematched.unique_APN.isin( matcheddf.unique_APN))|~(mergematched.gml_id.isin(matcheddf.gml_id))] #.dropna(subset=['unique_APN','gml_id'])
             finaldf = pd.concat([mergematched, missingop])
             statDF['unmatchedOPwithZ'].loc[statDF['fips']==county] =len(missingop)+len(unmatchedop3)
-
+        
         
         
         finaldf.YearBuilt.fillna(finaldf.YEAR_BUILT, inplace=True)
@@ -566,8 +626,8 @@ for county in counties[342:]:
         finaldf.loc[(finaldf.unique_APN.notna())&(finaldf.gml_id.notna())&(finaldf.RowID.notna()), 'integrationcode'] = 'OPZ111'    
         finaldf.loc[(finaldf.gml_id.isna())&(finaldf.unique_APN.notna())&(finaldf.unique_APN.duplicated()==True)&(finaldf.RowID.notna()), 'integrationcode'] ='PZ1n'
         finaldf.loc[(finaldf.gml_id.notna())&(finaldf.gml_id.duplicated()==True)&(finaldf.unique_APN.isna())&(finaldf.RowID.notna()), 'integrationcode'] ='OZ1n'
-        finaldf.loc[(finaldf.gml_id.notna())&(finaldf.unique_APN.duplicated()==True)&(finaldf.RowID.isna()), 'integrationcode'] ='OPn1'
-        finaldf.loc[(finaldf.gml_id.notna())&(finaldf.unique_APN.duplicated()==True)&(finaldf.RowID.notna()), 'integrationcode'] = 'OPZn1n'  
+        finaldf.loc[(finaldf.gml_id.notna())&(finaldf.unique_APN.duplicated()==True)&(finaldf.unique_APN.notna())&(finaldf.RowID.isna()), 'integrationcode'] ='OPn1'
+        finaldf.loc[(finaldf.gml_id.notna())&(finaldf.unique_APN.duplicated()==True)&(finaldf.unique_APN.notna())&(finaldf.RowID.notna())&(finaldf.RowID.notna()), 'integrationcode'] = 'OPZn1n'  
         finaldf['integrationcode'].unique()
         #finaldf.geometry = finaldf.geometry.centroid
         finaldf =finaldf[finalcols]
@@ -596,7 +656,7 @@ for county in counties[342:]:
         except NameError:
             del   ocmgdf, OCM, nearestDAT, nearest_data, ztraxdf, ZtraxDF, ZtraxgDFprj
         statDF.to_csv('D:\DATA\ZTRAX_completeness_summary/OPZdataprocesssummary.csv')
-
+    
     else:
         finaldf = OPdf.copy()
         finaldf.geometry = finaldf.geometry.centroid
@@ -604,13 +664,14 @@ for county in counties[342:]:
         finaldf.loc[(finaldf.RowID.isna())&(finaldf.unique_APN.isna())&(finaldf.gml_id.notna()), 'integrationcode'] = 'O'              
         finaldf.loc[(finaldf.RowID.isna())&(finaldf.unique_APN.notna())&(finaldf.gml_id.isna()), 'integrationcode'] = 'P'      
         finaldf.loc[(finaldf.RowID.notna())&(finaldf.unique_APN.notna())&(finaldf.gml_id.isna()), 'integrationcode'] = 'PZ11'  
-        finaldf.loc[(finaldf.RowID.notna())&(finaldf.unique_APNN.isna())&(finaldf.gml_id.notna()), 'integrationcode'] = 'OZ11'
+        finaldf.loc[(finaldf.RowID.notna())&(finaldf.unique_APN.isna())&(finaldf.gml_id.notna()), 'integrationcode'] = 'OZ11'
         finaldf.loc[(finaldf.gml_id.notna())&(finaldf.unique_APN.notna())&(finaldf.RowID.isna()), 'integrationcode'] = 'OP11' 
         finaldf.loc[(finaldf.unique_APN.notna())&(finaldf.gml_id.notna())&(finaldf.RowID.notna()), 'integrationcode'] = 'OPZ111'    
         finaldf.loc[(finaldf.gml_id.isna())&(finaldf.unique_APN.notna())&(finaldf.unique_APN.duplicated()==True)&(finaldf.RowID.notna()), 'integrationcode'] ='PZ1n'
         finaldf.loc[(finaldf.gml_id.notna())&(finaldf.gml_id.duplicated()==True)&(finaldf.unique_APN.isna())&(finaldf.RowID.notna()), 'integrationcode'] ='OZ1n'
-        finaldf.loc[(finaldf.gml_id.notna())&(finaldf.unique_APN.duplicated()==True)&(finaldf.RowID.isna()), 'integrationcode'] ='OPn1'
-        finaldf.loc[(finaldf.gml_id.notna())&(finaldf.unique_APN.duplicated()==True)&(finaldf.RowID.notna()), 'integrationcode'] = 'OPZn1n'  
+        finaldf.loc[(finaldf.gml_id.notna())&(finaldf.unique_APN.duplicated()==True)&(finaldf.unique_APN.notna())&(finaldf.RowID.isna()), 'integrationcode'] ='OPn1'
+        finaldf.loc[(finaldf.gml_id.notna())&(finaldf.unique_APN.duplicated()==True)&(finaldf.unique_APN.notna())&(finaldf.RowID.notna())&(finaldf.RowID.notna()), 'integrationcode'] = 'OPZn1n'  
+        
         finaldf.YearBuilt.fillna(finaldf.YEAR_BUILT, inplace=True)
         finaldf.BuildingAreaSqFt.fillna(finaldf.BLDG_AREA, inplace=True)
         finaldf.FIPS = county
@@ -622,9 +683,9 @@ for county in counties[342:]:
         finaldf.loc[(finaldf['integrationcode'] =="Z"),'geometry'] =  geopandas.GeoSeries.from_wkt(finaldf.loc[(finaldf['integrationcode'] =="Z")].ztrax_point_geometry)
         finaldf["Long"] = finaldf.geometry.map(lambda p: p.x)
         finaldf["Lat"] =  finaldf.geometry.map(lambda p: p.y)
-
+        
         finaldf.to_csv('D:/DATA/01_ParcelOCMZtraxMerge/parcelocmztraxmerge_'+county+'.csv')
-
+        
         statDF['Z'].loc[statDF['fips']==county] = len(finaldf.loc[finaldf['integrationcode']=='Z'])
         statDF['O'].loc[statDF['fips']==county] = len(finaldf.loc[finaldf['integrationcode']=='O'])
         statDF['P'].loc[statDF['fips']==county] = len(finaldf.loc[finaldf['integrationcode']=='P'])
@@ -644,50 +705,3 @@ for county in counties[342:]:
 #OPZ11n(not possible)
 #OPZ1n1(this should be OPZn1n)
 #OPZ1nn (not possible)
-
-
-
-    
-#test = pd.concat([Mergedwithadd2, Bestmatchopz,mactheddf])
-#test = pd.concat([Mergedwithadd, Bestmatchopz,mactheddf])
-#test = finaldf.loc[(finaldf.RowID.notna())&(finaldf.APN.isna())&(finaldf.gml_id.isna())]
-#len(ZtraxDF)
-#errors=   Mergedwithadd[~(Mergedwithadd.RowID.isin((test.RowID)))]
-#errors=   mactheddf[(mactheddf.RowID.isin((test.RowID)))]
-#test = finaldf.loc[finaldf.integrationcode=="Z"]
-#mactheddf[(mactheddf.RowID.isin(test.RowID))]
-
-#test = finaldf.loc[finaldf.integrationcode=="O"]
-#finaldf.loc[finaldf['gml_id']=='ODQ5V1c3N0crOi0xNDc1MTAxOTUw']
-#test = finaldf[finaldf.duplicated(['gml_id'])&(finaldf.gml_id.notna())].sort_values('gml_id').head(50)
-#mactheddf.integrationcode.unique()
-#finaldf = pd.concat([unmatchedop3,Mergedwithadd, Bestmatchopz,mactheddf,unmatchedztrax2])
-#missingop.drop_duplicates(subset ='RowID', keep='first' )
-#finaldf[~(finaldf.APN.isin( matcheddf.APN))|~(finaldf.gml_id.isin(finaldf.gml_id))].dropna(subset=['APN','gml_id'])
-#len(finaldf)
-
-#OPdf.drop_duplicates(subset ='gml_id', keep='first' )
-test = finaldf[finaldf.duplicated(['RowID'])]
-test.RowID.unique()
-#test = pd.concat([Mergedwithadd, Bestmatchopz,matcheddf,unmatchedztrax2])
-#test.drop_duplicates(subset ='')
-
-#test = finaldf.loc[(finaldf.unique_APN.notna())&(finaldf.gml_id.notna())]
-#test2 = test[test.duplicated(['gml_id'])]
-#test2.loc[(test2.gml_id.notna())&(test2.unique_APN.notna())&(test2.RowID.isna()), 'integrationcode'] = 'OPZ111' 
-#test2.loc[(test2.gml_id.notna())&(test2.unique_APN.notna())&(test2.RowID.na())]
-#OPdf[OPdf.duplicated(['gml_id'])].dropna(subset = ['gml_id'])
-
-
-
-
-# OPdf[~(OPdf.APN.isin(Mergedwithadd.APN))|~(OPdf.gml_id.isin(Mergedwithadd.gml_id))]
-
-
-
-
-#unmatchedop.ocm_polygon_geometry 
-#finaldf[~(finaldf.unique_APN.isin( OPdf.unique_APN))|~(finaldf.gml_id.isin(OPdf.gml_id))] #.dropna(subset=['unique_APN','gml_id']) #df[df['column name'].isna()]
-
-
-
