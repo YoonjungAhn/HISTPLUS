@@ -64,10 +64,17 @@ for year in years :
     
     lidar_clipped = lidar_chm_im.rio.clip(crop_extent.geometry.apply(mapping),
                                           crop_extent.crs)
-    
+    #crop_extent.bounds.maxx
+    plt.rcParams.update({'font.family':'Helvetica'})
+    plt.style.use('dark_background')
     f, ax = plt.subplots(figsize=(10, 4))
     lidar_clipped.plot(ax=ax, vmin=0,vmax=34000)
-    ax.set(title="Settlement development 1900-2020")
+    ax.set(title="Settlement Development")
+    f.text(.7, .05, year, ha='left',  fontweight="bold", #style = 'italic',
+         fontsize = 30,
+         color = "white")
+    plt.rcParams.update({'text.color': "red"})
+    #plt.suptitle(year)
     ax.set_axis_off()
     plt.show()
     
@@ -77,6 +84,7 @@ for year in years :
 
 # build gif
 import glob
+import imageio
 output_gif = r'C:/Users/yoah2447/Documents/Yoonjung/HISTPLUS/raster/BUI_image/tmp.gif'
 frame_duration = 0.1
 with imageio.get_writer(output_gif, mode='I',duration=frame_duration) as writer:
@@ -84,12 +92,6 @@ with imageio.get_writer(output_gif, mode='I',duration=frame_duration) as writer:
         image = imageio.imread(name)
         writer.append_data(image)
     
-with imageio.get_writer(output_gif, mode='I',duration=frame_duration) as writer:
-    
-for filename in filenames:
-    if os.path.exists(filename):
-        image = imageio.imread(filename)
-        writer.append_data(image)
 
 
 
