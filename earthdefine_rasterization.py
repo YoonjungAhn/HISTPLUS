@@ -85,8 +85,15 @@ out_surface_BUPR = np.zeros((len(x_range),len(y_range))).astype(np.float32)
 eddf = geopandas.read_file('C:/Users/yoah2447/Documents/Yoonjung/EarthDefine_US_3D_Building_Footprints_CO_2019/EarthDefine_US_3D_Building_Footprints_CO_2019_points.shp')
 eddf.geometry = eddf.geometry.to_crs(crs_grid) #crs_grid , raster.rio.crs
 eddf=eddf[~eddf.geometry.is_empty]
-edgdf =eddf.groupby(['str_UUID'])['Area_SqFt', 'Stories', 'GrossArea', 'Volume'].mean().reset_index()
+edgdf = eddf.drop_duplicates(subset=['str_UUID'])
+edgdf['numofbuilding']=1
 
+target_variable = 'BUPR'
+statsvals = edgdf['numofbuilding'].values.astype(int)
+statistic = np.mean
+statistic_str= 'sum'   
+xbins, ybins = len(x_range), len(y_range) #number of bins in each dimension
+curr_surface = scipy.stats.binned_statistic_2d(edgdf.geometry.x.values,edgdf.geometry.y.values,statsvals,statistic=statistic_str,bins = [xbins, ybins],range=rasterrange)        
+out_surface_BUPR = np.maximum(out_surface_BUPR,np.nan_to_num(curr_surface.statistic))   
 
-
-
+gdalNumpy2floatRaster_compressed(np.rot90(out_surface_BUPR),'C:/Users/yoah2447/Documents/Yoonjung/EarthDefine_US_3D_Building_Footprints_CO_2019/EarthDefine_BUPR_CO.tif' ,template_raster,cols,rows,bitdepth)
