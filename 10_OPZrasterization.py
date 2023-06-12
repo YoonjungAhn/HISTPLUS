@@ -168,8 +168,23 @@ for year in years:
 
 
 #FBUY    
-years=range(1810,2025,1)
-for year in years:
+years=range(1810,2021,1)
+out_surface = np.ones((len(x_range),len(y_range))).astype(np.float32)*2030
+
+for name in glob.glob('C:/Users/yoah2447/Documents/Yoonjung/HISTPLUS/OPZ/*.csv'):
+    df = pd.read_csv(name)
+    
+    #df['STD_LAND_U'] = df['STD_LAND_U'].astype(str).str[:-2]
+    #DFLU = df[df['STD_LAND_U'].isin(LUcode) ]
+    gpdf1= geopandas.GeoDataFrame(df, geometry=geopandas.points_from_xy(df.Long, df.Lat))
+    gpdf1.crs = {'init' :'epsg:4326'}
+    gpdf1.geometry = gpdf1.geometry.to_crs(crs_grid) #crs_grid , raster.rio.crs
+    gpdf1=gpdf1[~gpdf1.geometry.is_empty]
+    
+    y=gpdf1.geometry.y.values.astype(int)
+    x= gpdf1.geometry.x.values.astype(int)
+        
+    gpdf = gpdf1.copy()
     target_variable = 'FBUY'
     statsvals = gpdf['YearBuilt'].values.astype(int)
     statistic = np.min
@@ -178,8 +193,9 @@ for year in years:
     out_surface =np.zeros((cols,rows)).astype(np.float32)
     out_surface = np.zeros((len(x_range),len(y_range))).astype(np.float32)
     curr_surface = scipy.stats.binned_statistic_2d(gpdf.geometry.x.values,gpdf.geometry.y.values,statsvals,statistic=statistic_str,bins = [xbins, ybins],range=rasterrange)        
-    out_surface = np.maximum(out_surface,np.nan_to_num(curr_surface.statistic))       
+    out_surface = np.minimum(out_surface,np.nan_to_num(curr_surface.statistic))       
+    out_surface = out_surface.replace(2030,0)
+    gdalNumpy2floatRaster_compressed(np.rot90(out_surface),'C:/Users/yoah2447/Documents/Yoonjung/HISTPLUS/raster/FBUY/'+str(year)[0:-2]+'_counties_resident_surface_%s_%s.tif' %(target_variable,statistic_str),template_raster,cols,rows,bitdepth)
     
-    gdalNumpy2floatRaster_compressed(np.rot90(out_surface),'C:/Users/yoah2447/Documents/Yoonjung/HISTPLUS/raster/FBUY/'+str(year)[0:-2]+'_35013counties_resident_surface_%s_%s.tif' %(target_variable,statistic_str),template_raster,cols,rows,bitdepth)
     
     
